@@ -5,7 +5,10 @@ package wincred
 
 import (
 	"errors"
+	"runtime"
 	"testing"
+	"time"
+	"unsafe"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -88,4 +91,40 @@ func TestSysCredDelete_Mock(t *testing.T) {
 	assert.NotPanics(t, func() { err = sysCredDelete(new(Credential), sysCRED_TYPE_GENERIC) })
 	assert.Nil(t, err)
 	mockCredDelete.AssertNumberOfCalls(t, "Call", 1)
+}
+
+func TestCredWrite_GCSafety_WithAttributes(t *testing.T) {
+	// Minimal repro for the Go 1.25 regression: we create a credential that has at least
+	// one Attribute with a non-empty Value (so sysFromCredential allocates the attributes
+	// slice internally). Then we force a GC after building the native struct and *before*
+	// calling CredWriteW. With the old uintptr-based fields, the GC can reclaim the slice,
+	// leaving dangling addresses and causing ERROR_INVALID_PARAMETER. With the fix, it’s fine.
+	cred := &Credential{
+		TargetName:     "Foo",
+		Comment:        "Bar",
+		LastWritten:    time.Now(),
+		TargetAlias:    "MyAlias",
+		UserName:       "Nobody",
+		Persist:        PersistLocalMachine,
+		CredentialBlob: []byte("secret"),
+		Attributes: []CredentialAttribute{
+			{Keyword: "label", Value: []byte("hello-world")},
+		},
+	}
+
+	ncred := sysFromCredential(cred)
+	ncred.Type = uint32(sysCRED_TYPE_GENERIC)
+
+	// run GC a few times to gc the attributes slice.
+	for i := 0; i < 5; i++ {
+		runtime.GC()
+	}
+
+	// call CredWriteW - same as sysCredWrite
+	ret, _, err := procCredWrite.Call(uintptr(unsafe.Pointer(ncred)), 0)
+	if ret == 0 {
+		t.Fatalf("CredWriteW failed: %v", err)
+	}
+
+	_ = sysCredDelete(cred, sysCRED_TYPE_GENERIC)
 }
