@@ -1,3 +1,4 @@
+//go:build windows
 // +build windows
 
 package wincred
@@ -5,7 +6,6 @@ package wincred
 import (
 	"testing"
 	"time"
-	"unsafe"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -52,7 +52,7 @@ func BenchmarkUtf16ToByte(b *testing.B) {
 
 func TestGoBytes(t *testing.T) {
 	input := []byte{1, 2, 3, 4, 5}
-	output := goBytes(uintptr(unsafe.Pointer(&input[0])), uint32(len(input)))
+	output := goBytes(&input[0], uint32(len(input)))
 	assert.Equal(t, len(input), len(output))
 	assert.Equal(t, input[0], output[0])
 	assert.Equal(t, input[1], output[1])
@@ -65,7 +65,7 @@ func TestGoBytes(t *testing.T) {
 
 func TestGoBytes_Null(t *testing.T) {
 	assert.NotPanics(t, func() {
-		output := goBytes(0, 123)
+		output := goBytes(nil, 123)
 		assert.Equal(t, []byte{}, output)
 	})
 }
@@ -73,7 +73,7 @@ func TestGoBytes_Null(t *testing.T) {
 func BenchmarkGoBytes(b *testing.B) {
 	input := []byte{1, 2, 3, 4, 5}
 	for i := 0; i < b.N; i++ {
-		goBytes(uintptr(unsafe.Pointer(&input[0])), uint32(len(input)))
+		_ = goBytes(&input[0], uint32(len(input)))
 	}
 }
 
@@ -108,7 +108,7 @@ func TestConversion_CredentialBlob(t *testing.T) {
 	sys := sysFromCredential(cred)
 	res := sysToCredential(sys)
 	assert.Equal(t, uint32(3), sys.CredentialBlobSize)
-	assert.NotEqual(t, uintptr(0), sys.CredentialBlob)
+	assert.NotNil(t, res.CredentialBlob)
 	assert.Equal(t, cred.CredentialBlob, res.CredentialBlob)
 }
 
@@ -117,7 +117,7 @@ func TestConversion_CredentialBlob_Empty(t *testing.T) {
 	cred.CredentialBlob = []byte{} // empty blob
 	sys := sysFromCredential(cred)
 	res := sysToCredential(sys)
-	assert.Equal(t, uintptr(0), sys.CredentialBlob)
+	assert.Nil(t, sys.CredentialBlob)
 	assert.Equal(t, uint32(0), sys.CredentialBlobSize)
 	assert.Equal(t, []byte{}, res.CredentialBlob)
 }
@@ -127,7 +127,7 @@ func TestConversion_CredentialBlob_Nil(t *testing.T) {
 	cred.CredentialBlob = nil // nil blob
 	sys := sysFromCredential(cred)
 	res := sysToCredential(sys)
-	assert.Equal(t, uintptr(0), sys.CredentialBlob)
+	assert.Nil(t, sys.CredentialBlob)
 	assert.Equal(t, uint32(0), sys.CredentialBlobSize)
 	assert.Equal(t, []byte{}, res.CredentialBlob)
 }
@@ -140,7 +140,7 @@ func TestConversion_Attributes(t *testing.T) {
 	}
 	sys := sysFromCredential(cred)
 	res := sysToCredential(sys)
-	assert.NotEqual(t, uintptr(0), sys.Attributes)
+	assert.NotNil(t, sys.Attributes)
 	assert.Equal(t, uint32(2), sys.AttributeCount)
 	assert.Equal(t, cred.Attributes, res.Attributes)
 }
@@ -150,7 +150,7 @@ func TestConversion_Attributes_Empty(t *testing.T) {
 	cred.Attributes = []CredentialAttribute{}
 	sys := sysFromCredential(cred)
 	res := sysToCredential(sys)
-	assert.Equal(t, uintptr(0), sys.Attributes)
+	assert.Nil(t, sys.Attributes)
 	assert.Equal(t, uint32(0), sys.AttributeCount)
 	assert.Equal(t, []CredentialAttribute{}, res.Attributes)
 }
@@ -160,7 +160,7 @@ func TestConversion_Attributes_Nil(t *testing.T) {
 	cred.Attributes = nil
 	sys := sysFromCredential(cred)
 	res := sysToCredential(sys)
-	assert.Equal(t, uintptr(0), sys.Attributes)
+	assert.Nil(t, sys.Attributes)
 	assert.Equal(t, uint32(0), sys.AttributeCount)
 	assert.Equal(t, []CredentialAttribute{}, res.Attributes)
 }
